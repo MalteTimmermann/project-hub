@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Project Hub</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">◆</span>
+      <h1>Project Hub</h1>
+    </div>
+    <button id="new-btn" class="btn btn-primary">+ Neues Projekt</button>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <input id="search" type="search" placeholder="Projekte filtern…" />
+      <button id="reload" class="btn btn-ghost" title="Neu laden">↻</button>
+    </div>
+
+    <div id="status" class="status"></div>
+    <section id="grid" class="grid"></section>
+  </main>
+
+  <!-- Modal: Neues Projekt -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <h2>Neues Projekt</h2>
+      <form id="new-form">
+        <label>Name
+          <input id="p-name" required placeholder="mein-neues-webapp" />
+        </label>
+        <label>Beschreibung
+          <input id="p-desc" placeholder="Kurzbeschreibung (optional)" />
+        </label>
+        <label class="checkbox">
+          <input id="p-private" type="checkbox" checked /> Privates Repo
+        </label>
+        <div class="modal-actions">
+          <button type="button" id="cancel" class="btn btn-ghost">Abbrechen</button>
+          <button type="submit" class="btn btn-primary">Anlegen</button>
+        </div>
+      </form>
+      <div id="form-status" class="form-status"></div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

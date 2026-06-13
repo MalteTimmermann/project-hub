@@ -1,0 +1,122 @@
+const grid = document.getElementById("grid");
+const statusEl = document.getElementById("status");
+const search = document.getElementById("search");
+const modal = document.getElementById("modal");
+const formStatus = document.getElementById("form-status");
+
+let projects = [];
+
+// Optionaler Dashboard-Token (falls gesetzt) im Memory halten
+function headers() {
+  const h = { "Content-Type": "application/json" };
+  if (window.__DASHBOARD_TOKEN__) h["X-Dashboard-Token"] = window.__DASHBOARD_TOKEN__;
+  return h;
+}
+
+function fmtDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleDateString("de-DE", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function render(list) {
+  grid.innerHTML = "";
+  if (!list.length) {
+    grid.innerHTML = '<div class="empty">Noch keine Projekte. Lege oben rechts dein erstes an.</div>';
+    return;
+  }
+  for (const p of list) {
+    const card = document.createElement("div");
+    card.className = "card";
+    const live = p.homepage
+      ? `<a class="btn btn-small" href="${p.homepage}" target="_blank" rel="noopener">Live ↗</a>`
+      : "";
+    card.innerHTML = `
+      <div class="card-head">
+        <span class="card-name">${p.name}</span>
+        <span class="badge">${p.private ? "privat" : "public"}</span>
+      </div>
+      <div class="card-desc">${p.description || ""}</div>
+      <div class="card-meta">
+        <span>${p.language ? `<span class="dot"></span>${p.language}` : ""}</span>
+        <span>${fmtDate(p.updated_at)}</span>
+      </div>
+      <div class="card-links">
+        <a class="btn btn-small" href="${p.html_url}" target="_blank" rel="noopener">GitHub ↗</a>
+        ${live}
+      </div>`;
+    grid.appendChild(card);
+  }
+}
+
+function applyFilter() {
+  const q = search.value.toLowerCase().trim();
+  render(q ? projects.filter((p) =>
+    (p.name + " " + p.description).toLowerCase().includes(q)) : projects);
+}
+
+async function load() {
+  statusEl.textContent = "Lade Projekte…";
+  statusEl.className = "status";
+  try {
+    const res = await fetch("/api/projects", { headers: headers() });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Fehler beim Laden");
+    projects = data;
+    statusEl.textContent = `${projects.length} Projekt(e)`;
+    applyFilter();
+  } catch (e) {
+    statusEl.textContent = "Fehler: " + e.message;
+    statusEl.className = "status error";
+  }
+}
+
+// --- Modal ---
+document.getElementById("new-btn").onclick = () => {
+  formStatus.textContent = "";
+  modal.classList.remove("hidden");
+  document.getElementById("p-name").focus();
+};
+document.getElementById("cancel").onclick = () => modal.classList.add("hidden");
+modal.onclick = (e) => { if (e.target === modal) modal.classList.add("hidden"); };
+
+document.getElementById("new-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const btn = e.submitter;
+  btn.disabled = true;
+  formStatus.className = "form-status";
+  formStatus.textContent = "Lege Repo an…";
+  try {
+    const body = {
+      name: document.getElementById("p-name").value,
+      description: document.getElementById("p-desc").value,
+      private: document.getElementById("p-private").checked,
+    };
+    const res = await fetch("/api/projects", {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Fehler beim Anlegen");
+    formStatus.className = "form-status ok";
+    let msg = `✓ Angelegt: <a href="${data.html_url}" target="_blank" rel="noopener">${data.full_name}</a>`;
+    if (data.warnings && data.warnings.length) {
+      msg += `<br><span style="color:#d29922">⚠ Secrets: ${data.warnings.join("; ")}</span>`;
+    }
+    formStatus.innerHTML = msg;
+    document.getElementById("new-form").reset();
+    document.getElementById("p-private").checked = true;
+    await load();
+  } catch (err) {
+    formStatus.className = "form-status error";
+    formStatus.textContent = "Fehler: " + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+search.oninput = applyFilter;
+document.getElementById("reload").onclick = load;
+
+load();

@@ -1,0 +1,15 @@
+[Unit]
+Description=Project Hub (FastAPI/Uvicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=projecthub
+WorkingDirectory=/opt/project-hub
+EnvironmentFile=/opt/project-hub/.env
+ExecStart=/opt/project-hub/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8080
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
