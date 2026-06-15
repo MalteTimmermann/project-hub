@@ -9,10 +9,15 @@ APP_USER="projecthub"
 
 echo "==> System-Pakete"
 apt-get update -y
-apt-get install -y python3 python3-venv python3-pip git nginx
+apt-get install -y git nginx docker.io docker-compose-plugin
+
+echo "==> Docker aktivieren"
+systemctl enable docker
+systemctl start docker
 
 echo "==> Service-User anlegen"
 id -u "$APP_USER" &>/dev/null || useradd --system --create-home --shell /usr/sbin/nologin "$APP_USER"
+usermod -aG docker "$APP_USER"
 
 echo "==> Repo klonen"
 if [ -d "$APP_DIR/.git" ]; then
@@ -20,11 +25,6 @@ if [ -d "$APP_DIR/.git" ]; then
 else
   git clone "$REPO_URL" "$APP_DIR"
 fi
-
-echo "==> Virtualenv + Dependencies"
-python3 -m venv "$APP_DIR/.venv"
-"$APP_DIR/.venv/bin/pip" install --upgrade pip
-"$APP_DIR/.venv/bin/pip" install -r "$APP_DIR/requirements.txt"
 
 echo "==> .env vorbereiten"
 if [ ! -f "$APP_DIR/.env" ]; then
@@ -39,7 +39,6 @@ echo "==> systemd-Service"
 cp "$APP_DIR/deploy/project-hub.service" /etc/systemd/system/project-hub.service
 systemctl daemon-reload
 systemctl enable project-hub
-systemctl restart project-hub
 
 echo "==> Nginx"
 cp "$APP_DIR/deploy/nginx.conf" /etc/nginx/sites-available/project-hub
@@ -49,6 +48,6 @@ nginx -t && systemctl reload nginx
 echo ""
 echo "Fertig. Naechste Schritte:"
 echo "  1) $APP_DIR/.env mit Token/Owner/Template fuellen"
-echo "  2) sudo systemctl restart project-hub"
+echo "  2) sudo -u $APP_USER docker compose -f $APP_DIR/docker-compose.yml up -d --build"
 echo "  3) server_name in nginx.conf anpassen + 'sudo certbot --nginx -d <domain>'"
-echo "  4) Deploy-User braucht sudo-Rechte fuer 'systemctl restart project-hub' (siehe README)"
+echo "  4) GitHub Secrets setzen: VPS_HOST, VPS_USER ($APP_USER), VPS_PORT, VPS_SSH_KEY"

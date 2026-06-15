@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException
@@ -6,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
 
 from .config import settings
-from .github_client import GitHubError, create_project, list_projects
+from .github_client import GitHubError, cleanup_vps, create_project, delete_project, list_projects
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -18,6 +19,9 @@ def _check_auth(token: str | None) -> None:
     """Optionaler simpler Schutz via X-Dashboard-Token Header."""
     if settings.dashboard_token and token != settings.dashboard_token:
         raise HTTPException(status_code=401, detail="Nicht autorisiert.")
+
+
+_NAME_RE = re.compile(r"^[a-zA-Z0-9._-]+$")
 
 
 class NewProject(BaseModel):
@@ -65,6 +69,22 @@ async def post_project(
         return JSONResponse(status_code=201, content=repo)
     except GitHubError as e:
         return JSONResponse(status_code=e.status, content={"detail": e.message})
+
+
+@app.delete("/api/projects/{name}")
+async def del_project(
+    name: str, x_dashboard_token: str | None = Header(default=None)
+):
+    _check_auth(x_dashboard_token)
+    if not _NAME_RE.fullmatch(name):
+        raise HTTPException(status_code=400, detail="Ungültiger Projektname.")
+    full_name = f"{settings.github_owner}/{name}"
+    try:
+        await delete_project(full_name)
+    except GitHubError as e:
+        return JSONResponse(status_code=e.status, content={"detail": e.message})
+    warnings = await cleanup_vps(name)
+    return JSONResponse(content={"deleted": name, "warnings": warnings})
 
 
 @app.get("/")

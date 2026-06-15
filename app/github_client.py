@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import shlex
+import tempfile
 from base64 import b64encode
 from datetime import datetime
 
@@ -197,6 +200,57 @@ async def set_deploy_secrets(full_name: str) -> list[str]:
         except GitHubError as e:
             warnings.append(f"{name}: {e.message}")
     return warnings
+
+
+async def delete_project(full_name: str) -> None:
+    """Loescht das GitHub-Repo dauerhaft (nicht rueckgaengig zu machen)."""
+    await _request("DELETE", f"/repos/{full_name}")
+
+
+async def cleanup_vps(name: str) -> list[str]:
+    """SSH in VPS, entfernt Service, Nginx-Config und App-Verzeichnis."""
+    if not all([settings.vps_host, settings.vps_user, settings.vps_ssh_key]):
+        return ["VPS-Zugangsdaten nicht konfiguriert — Server-Cleanup uebersprungen."]
+
+    safe = shlex.quote(name)
+    cmds = (
+        f"systemctl stop {safe} 2>/dev/null || true && "
+        f"systemctl disable {safe} 2>/dev/null || true && "
+        f"rm -f /etc/systemd/system/{safe}.service && "
+        "systemctl daemon-reload && "
+        f"rm -f /etc/nginx/sites-available/{safe} /etc/nginx/sites-enabled/{safe} && "
+        "nginx -s reload 2>/dev/null || true && "
+        f"rm -rf /opt/{safe}"
+    )
+
+    key_content = settings.vps_ssh_key.replace("\\n", "\n")
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".key", delete=False) as f:
+        f.write(key_content)
+        key_file = f.name
+
+    try:
+        os.chmod(key_file, 0o600)
+        proc = await asyncio.create_subprocess_exec(
+            "ssh",
+            "-i", key_file,
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "ConnectTimeout=10",
+            "-p", settings.vps_port or "22",
+            f"{settings.vps_user}@{settings.vps_host}",
+            f"sudo bash -c {shlex.quote(cmds)}",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+        if proc.returncode != 0:
+            return [f"VPS-Cleanup Fehler: {stderr.decode().strip()[:300]}"]
+        return []
+    except asyncio.TimeoutError:
+        return ["VPS-Cleanup Timeout (>30s)."]
+    except Exception as e:
+        return [f"VPS-Cleanup fehlgeschlagen: {e}"]
+    finally:
+        os.unlink(key_file)
 
 
 async def create_project(name: str, description: str = "", private: bool = True) -> dict:

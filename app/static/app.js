@@ -121,6 +121,7 @@ function render(list) {
         <div class="card-links">
           <a class="btn btn-small" href="${p.html_url}" target="_blank" rel="noopener">GitHub ↗</a>
           <a class="btn btn-small" href="/apps/${p.name}/" target="_blank" rel="noopener">App ↗</a>
+          <button class="btn btn-small btn-danger" data-name="${escapeHtml(p.name)}" data-full="${escapeHtml(p.full_name)}">✕</button>
         </div>
         <div class="commits">${(p.commits || []).map(c => `
           <a class="commit" href="${c.url}" target="_blank" rel="noopener">
@@ -202,6 +203,37 @@ document.getElementById("new-form").onsubmit = async (e) => {
     btn.disabled = false;
   }
 };
+
+grid.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".btn-danger");
+  if (!btn) return;
+  const name = btn.dataset.name;
+  const full = btn.dataset.full;
+  if (!confirm(`Projekt „${name}" wirklich löschen?\n\nDas GitHub-Repo (${full}) und die Server-Dateien werden dauerhaft entfernt. Diese Aktion kann nicht rückgängig gemacht werden.`)) return;
+  btn.disabled = true;
+  btn.textContent = "…";
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+      headers: headers(),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert("Fehler beim Löschen: " + (data.detail || res.statusText));
+      btn.disabled = false;
+      btn.textContent = "✕";
+      return;
+    }
+    if (data.warnings && data.warnings.length) {
+      alert("Gelöscht ✓\n\n⚠ Server-Cleanup:\n" + data.warnings.join("\n"));
+    }
+    await load();
+  } catch (err) {
+    alert("Fehler: " + err.message);
+    btn.disabled = false;
+    btn.textContent = "✕";
+  }
+});
 
 search.oninput = applyFilter;
 document.getElementById("reload").onclick = load;

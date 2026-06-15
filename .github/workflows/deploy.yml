@@ -26,6 +26,5 @@ jobs:
             cd /opt/project-hub
             git fetch --all
             git reset --hard origin/main
-            /opt/project-hub/.venv/bin/pip install -r requirements.txt --quiet
-            sudo systemctl restart project-hub
+            docker compose up -d --build
             echo "Deploy fertig: $(git rev-parse --short HEAD)"

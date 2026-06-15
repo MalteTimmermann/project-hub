@@ -123,6 +123,9 @@ main { max-width: 1200px; margin: 0 auto; padding: 28px; }
 .btn-primary:hover { background: var(--accent-hover); }
 .btn-ghost { background: transparent; }
 .btn-small { padding: 5px 10px; font-size: 12px; }
+.btn-danger { border-color: #f85149; color: #f85149; }
+.btn-danger:hover { background: #f85149; color: #fff; border-color: #f85149; }
+.btn-danger:disabled { opacity: .5; cursor: not-allowed; }
 
 .status, .form-status { color: var(--muted); font-size: 14px; margin: 10px 0; min-height: 20px; }
 .status.error, .form-status.error { color: #f85149; }
