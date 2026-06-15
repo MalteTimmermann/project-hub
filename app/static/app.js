@@ -56,7 +56,13 @@ function headers() {
   return h;
 }
 
-function ciIcon(status, conclusion, url) {
+function fmtDuration(s) {
+  if (s == null || s < 0) return "";
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
+function ciIcon(status, conclusion, url, durationS) {
   let icon, cls, title;
   if (!status) return "";
   if (status === "in_progress") {
@@ -71,7 +77,8 @@ function ciIcon(status, conclusion, url) {
       default:          icon = "?"; cls = "ci-unknown";   title = conclusion || status;
     }
   }
-  const badge = `<span class="ci ${cls}" title="${title}">${icon}</span>`;
+  const dur = fmtDuration(durationS);
+  const badge = `<span class="ci ${cls}" title="${title}">${icon}${dur ? ` <span class="ci-dur">${dur}</span>` : ""}</span>`;
   return url
     ? `<a href="${url}" target="_blank" rel="noopener" class="ci-link">${badge}</a>`
     : badge;
@@ -105,7 +112,7 @@ function render(list) {
         <div class="card-desc">${p.description || ""}</div>
         ${langBlock(p.languages)}
         <div class="card-meta">
-          ${ciIcon(p.ci_status, p.ci_conclusion, p.ci_url)}
+          ${ciIcon(p.ci_status, p.ci_conclusion, p.ci_url, p.ci_duration_s)}
           <div class="card-dates">
             <span title="Erstellt">⊕ ${fmtDate(p.created_at)}</span>
             <span title="Letzter Commit">${p.commits && p.commits[0] ? `↑ ${fmtDate(p.commits[0].date)}` : ""}</span>

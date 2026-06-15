@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from base64 import b64encode
+from datetime import datetime
 
 import httpx
 from nacl import encoding, public
@@ -77,10 +78,21 @@ async def get_latest_run(full_name: str) -> dict | None:
         runs = resp.json().get("workflow_runs", [])
         if runs:
             r = runs[0]
+            duration_s = None
+            started = r.get("run_started_at")
+            ended = r.get("updated_at")
+            if started and ended:
+                fmt = "%Y-%m-%dT%H:%M:%SZ"
+                try:
+                    delta = datetime.strptime(ended, fmt) - datetime.strptime(started, fmt)
+                    duration_s = int(delta.total_seconds())
+                except ValueError:
+                    pass
             return {
                 "status": r.get("status"),
                 "conclusion": r.get("conclusion"),
                 "url": r.get("html_url"),
+                "duration_s": duration_s,
             }
     except GitHubError:
         pass
@@ -136,10 +148,12 @@ async def list_projects() -> list[dict]:
             p["ci_status"] = ci.get("status")
             p["ci_conclusion"] = ci.get("conclusion")
             p["ci_url"] = ci.get("url")
+            p["ci_duration_s"] = ci.get("duration_s")
         else:
             p["ci_status"] = None
             p["ci_conclusion"] = None
             p["ci_url"] = None
+            p["ci_duration_s"] = None
         p["commits"] = commits if isinstance(commits, list) else []
         p["languages"] = langs if isinstance(langs, list) else []
 
