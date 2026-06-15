@@ -23,6 +23,31 @@ if (themeToggle) {
 const savedTheme = localStorage.getItem("theme");
 applyTheme(savedTheme !== "light");
 
+const LANG_COLORS = {
+  "Python": "#3572A5", "JavaScript": "#f1e05a", "TypeScript": "#3178c6",
+  "HTML": "#e34c26", "CSS": "#563d7c", "SCSS": "#c6538c",
+  "Shell": "#89e051", "Bash": "#89e051", "Go": "#00ADD8",
+  "Rust": "#dea584", "Java": "#b07219", "C": "#555555",
+  "C++": "#f34b7d", "C#": "#178600", "Ruby": "#701516",
+  "PHP": "#4F5D95", "Swift": "#F05138", "Kotlin": "#A97BFF",
+  "Dockerfile": "#384d54", "Vue": "#41b883", "Svelte": "#ff3e00",
+};
+
+function langColor(name) {
+  return LANG_COLORS[name] || "#8b949e";
+}
+
+function langBlock(languages) {
+  if (!languages || !languages.length) return "";
+  const segs = languages
+    .map(l => `<div class="lang-seg" style="width:${l.pct}%;background:${langColor(l.name)}" title="${l.name} ${l.pct}%"></div>`)
+    .join("");
+  const items = languages
+    .map(l => `<span class="lang-item"><span class="lang-dot" style="background:${langColor(l.name)}"></span>${l.name}<span class="lang-pct">${l.pct}%</span></span>`)
+    .join("");
+  return `<div class="card-langs"><div class="lang-bar">${segs}</div><div class="lang-list">${items}</div></div>`;
+}
+
 let projects = [];
 
 function headers() {
@@ -78,10 +103,13 @@ function render(list) {
           <span class="badge">${p.private ? "privat" : "public"}</span>
         </div>
         <div class="card-desc">${p.description || ""}</div>
+        ${langBlock(p.languages)}
         <div class="card-meta">
-          <span>${p.language ? `<span class="dot"></span>${p.language}` : ""}</span>
-          <span>${fmtDate(p.updated_at)}</span>
           ${ciIcon(p.ci_status, p.ci_conclusion, p.ci_url)}
+          <div class="card-dates">
+            <span title="Erstellt">⊕ ${fmtDate(p.created_at)}</span>
+            <span title="Letzter Commit">${p.commits && p.commits[0] ? `↑ ${fmtDate(p.commits[0].date)}` : ""}</span>
+          </div>
         </div>
         <div class="card-links">
           <a class="btn btn-small" href="${p.html_url}" target="_blank" rel="noopener">GitHub ↗</a>

@@ -99,7 +99,8 @@ main { max-width: 1200px; margin: 0 auto; padding: 28px; }
 .card-name { font-weight: 600; font-size: 15px; word-break: break-word; }
 .badge { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 20px; padding: 2px 8px; flex-shrink: 0; }
 .card-desc { color: var(--muted); font-size: 13px; flex: 1; min-height: 18px; }
-.card-meta { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--muted); }
+.card-meta { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--muted); }
+.card-dates { display: flex; flex-direction: column; gap: 2px; text-align: right; }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); display: inline-block; margin-right: 5px; }
 .card-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
 
@@ -158,6 +159,22 @@ main { max-width: 1200px; margin: 0 auto; padding: 28px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
 
 .empty { color: var(--muted); text-align: center; padding: 60px 0; }
+
+/* Sprachen */
+.card-langs { display: flex; flex-direction: column; gap: 6px; }
+.lang-bar {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--surface-2);
+  gap: 1px;
+}
+.lang-seg { height: 100%; border-radius: 1px; min-width: 1px; }
+.lang-list { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.lang-item { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); }
+.lang-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.lang-pct { color: var(--muted); opacity: .7; }
 
 /* Commit-Liste */
 .commits { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }

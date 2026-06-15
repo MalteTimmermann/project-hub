@@ -39,6 +39,21 @@ async def _request(method: str, path: str, **kwargs) -> httpx.Response:
     return resp
 
 
+async def get_languages(full_name: str) -> list[dict]:
+    try:
+        resp = await _request("GET", f"/repos/{full_name}/languages")
+        data = resp.json()
+        total = sum(data.values())
+        if not total:
+            return []
+        return [
+            {"name": lang, "pct": round(bytes_ / total * 100, 1)}
+            for lang, bytes_ in sorted(data.items(), key=lambda x: -x[1])
+        ]
+    except GitHubError:
+        return []
+
+
 async def get_recent_commits(full_name: str) -> list[dict]:
     try:
         resp = await _request("GET", f"/repos/{full_name}/commits?per_page=2")
@@ -97,8 +112,9 @@ async def list_projects() -> list[dict]:
                 "description": r.get("description") or "",
                 "html_url": r["html_url"],
                 "homepage": r.get("homepage") or "",
-                "language": r.get("language") or "",
+                "language": r.get("language") or "",  # kept for search/filter compat
                 "topics": r.get("topics") or [],
+                "created_at": r.get("created_at") or "",
                 "updated_at": r.get("pushed_at") or r.get("updated_at"),
                 "private": r.get("private", False),
             }
@@ -108,11 +124,14 @@ async def list_projects() -> list[dict]:
     results = await asyncio.gather(
         *[get_latest_run(p["full_name"]) for p in projects],
         *[get_recent_commits(p["full_name"]) for p in projects],
+        *[get_languages(p["full_name"]) for p in projects],
         return_exceptions=True,
     )
-    ci_results, commit_results = results[:n], results[n:]
+    ci_results = results[:n]
+    commit_results = results[n : 2 * n]
+    lang_results = results[2 * n :]
 
-    for p, ci, commits in zip(projects, ci_results, commit_results):
+    for p, ci, commits, langs in zip(projects, ci_results, commit_results, lang_results):
         if isinstance(ci, dict):
             p["ci_status"] = ci.get("status")
             p["ci_conclusion"] = ci.get("conclusion")
@@ -122,6 +141,7 @@ async def list_projects() -> list[dict]:
             p["ci_conclusion"] = None
             p["ci_url"] = None
         p["commits"] = commits if isinstance(commits, list) else []
+        p["languages"] = langs if isinstance(langs, list) else []
 
     return projects
 
