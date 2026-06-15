@@ -25,7 +25,6 @@ applyTheme(savedTheme !== "light");
 
 let projects = [];
 
-// Optionaler Dashboard-Token (falls gesetzt) im Memory halten
 function headers() {
   const h = { "Content-Type": "application/json" };
   if (window.__DASHBOARD_TOKEN__) h["X-Dashboard-Token"] = window.__DASHBOARD_TOKEN__;
@@ -66,25 +65,29 @@ function render(list) {
     return;
   }
   for (const p of list) {
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `
-      <div class="card-head">
-        <span class="card-name">${p.name}</span>
-        <span class="badge">${p.private ? "privat" : "public"}</span>
+    const row = document.createElement("div");
+    row.className = "project-row";
+    row.innerHTML = `
+      <div class="project-info">
+        <div class="card-head">
+          <span class="card-name">${p.name}</span>
+          <span class="badge">${p.private ? "privat" : "public"}</span>
+        </div>
+        <div class="card-desc">${p.description || ""}</div>
+        <div class="card-meta">
+          <span>${p.language ? `<span class="dot"></span>${p.language}` : ""}</span>
+          <span>${fmtDate(p.updated_at)}</span>
+          ${ciIcon(p.ci_status, p.ci_conclusion, p.ci_url)}
+        </div>
+        <div class="card-links">
+          <a class="btn btn-small" href="${p.html_url}" target="_blank" rel="noopener">GitHub ↗</a>
+          <a class="btn btn-small" href="/apps/${p.name}/" target="_blank" rel="noopener">App ↗</a>
+        </div>
       </div>
-      <div class="card-desc">${p.description || ""}</div>
-      <div class="card-meta">
-        <span>${p.language ? `<span class="dot"></span>${p.language}` : ""}</span>
-        <span>${fmtDate(p.updated_at)}</span>
-        ${ciIcon(p.ci_status, p.ci_conclusion, p.ci_url)}
-      </div>
-      <div class="card-links">
-        <a class="btn btn-small" href="${p.html_url}" target="_blank" rel="noopener">GitHub ↗</a>
-        <a class="btn btn-small" href="/apps/${p.name}/" target="_blank" rel="noopener">App ↗</a>
-        <button class="btn btn-small preview-btn" data-url="/apps/${p.name}/" data-name="${p.name}">Vorschau</button>
+      <div class="project-preview">
+        <iframe src="/apps/${p.name}/" loading="lazy" title="${p.name}"></iframe>
       </div>`;
-    grid.appendChild(card);
+    grid.appendChild(row);
   }
 }
 
@@ -110,7 +113,7 @@ async function load() {
   }
 }
 
-// --- Modal ---
+// --- Modal: Neues Projekt ---
 document.getElementById("new-btn").onclick = () => {
   formStatus.textContent = "";
   modal.classList.remove("hidden");
@@ -157,29 +160,5 @@ document.getElementById("new-form").onsubmit = async (e) => {
 
 search.oninput = applyFilter;
 document.getElementById("reload").onclick = load;
-
-// --- Vorschau-Modal ---
-const previewModal = document.getElementById("preview-modal");
-const previewFrame = document.getElementById("preview-frame");
-const previewTitle = document.getElementById("preview-title");
-const previewOpen  = document.getElementById("preview-open");
-
-function closePreview() {
-  previewModal.classList.add("hidden");
-  previewFrame.src = "";
-}
-
-document.getElementById("preview-close").onclick = closePreview;
-previewModal.onclick = (e) => { if (e.target === previewModal) closePreview(); };
-
-grid.addEventListener("click", (e) => {
-  const btn = e.target.closest(".preview-btn");
-  if (!btn) return;
-  const url = btn.dataset.url;
-  previewTitle.textContent = btn.dataset.name;
-  previewOpen.href = url;
-  previewFrame.src = url;
-  previewModal.classList.remove("hidden");
-});
 
 load();
