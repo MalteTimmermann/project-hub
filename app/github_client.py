@@ -39,6 +39,23 @@ async def _request(method: str, path: str, **kwargs) -> httpx.Response:
     return resp
 
 
+async def get_recent_commits(full_name: str) -> list[dict]:
+    try:
+        resp = await _request("GET", f"/repos/{full_name}/commits?per_page=2")
+        commits = []
+        for c in resp.json():
+            commits.append({
+                "sha": c["sha"][:7],
+                "message": c["commit"]["message"].split("\n")[0],
+                "author": c["commit"]["author"]["name"],
+                "date": c["commit"]["author"]["date"],
+                "url": c["html_url"],
+            })
+        return commits
+    except GitHubError:
+        return []
+
+
 async def get_latest_run(full_name: str) -> dict | None:
     try:
         resp = await _request("GET", f"/repos/{full_name}/actions/runs?per_page=1")
@@ -87,11 +104,15 @@ async def list_projects() -> list[dict]:
             }
         )
 
-    ci_results = await asyncio.gather(
+    n = len(projects)
+    results = await asyncio.gather(
         *[get_latest_run(p["full_name"]) for p in projects],
+        *[get_recent_commits(p["full_name"]) for p in projects],
         return_exceptions=True,
     )
-    for p, ci in zip(projects, ci_results):
+    ci_results, commit_results = results[:n], results[n:]
+
+    for p, ci, commits in zip(projects, ci_results, commit_results):
         if isinstance(ci, dict):
             p["ci_status"] = ci.get("status")
             p["ci_conclusion"] = ci.get("conclusion")
@@ -100,6 +121,7 @@ async def list_projects() -> list[dict]:
             p["ci_status"] = None
             p["ci_conclusion"] = None
             p["ci_url"] = None
+        p["commits"] = commits if isinstance(commits, list) else []
 
     return projects
 

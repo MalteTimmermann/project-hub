@@ -159,6 +159,17 @@ main { max-width: 1200px; margin: 0 auto; padding: 28px; }
 
 .empty { color: var(--muted); text-align: center; padding: 60px 0; }
 
+/* Commit-Liste */
+.commits { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
+.commit {
+  display: flex; align-items: baseline; gap: 6px;
+  text-decoration: none; color: var(--text);
+  font-size: 12px; overflow: hidden;
+}
+.commit:hover .commit-msg { color: var(--accent); }
+.commit-sha { font-family: monospace; font-size: 11px; color: var(--accent); flex-shrink: 0; }
+.commit-msg { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 /* CI-Status-Badge */
 .ci { font-size: 13px; font-weight: 700; }
 .ci-success { color: var(--green); }

@@ -52,6 +52,10 @@ function ciIcon(status, conclusion, url) {
     : badge;
 }
 
+function escapeHtml(str) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 function fmtDate(iso) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -82,6 +86,12 @@ function render(list) {
         <div class="card-links">
           <a class="btn btn-small" href="${p.html_url}" target="_blank" rel="noopener">GitHub ↗</a>
           <a class="btn btn-small" href="/apps/${p.name}/" target="_blank" rel="noopener">App ↗</a>
+        </div>
+        <div class="commits">${(p.commits || []).map(c => `
+          <a class="commit" href="${c.url}" target="_blank" rel="noopener">
+            <code class="commit-sha">${c.sha}</code>
+            <span class="commit-msg">${escapeHtml(c.message)}</span>
+          </a>`).join("")}
         </div>
       </div>
       <div class="project-preview">
