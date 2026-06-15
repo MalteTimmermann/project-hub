@@ -26,5 +26,5 @@ jobs:
             cd /opt/project-hub
             git fetch --all
             git reset --hard origin/main
-            docker compose up -d --build
+            sudo docker compose up -d --build
             echo "Deploy fertig: $(git rev-parse --short HEAD)"

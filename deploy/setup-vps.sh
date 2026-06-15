@@ -17,7 +17,7 @@ systemctl start docker
 
 echo "==> Service-User anlegen"
 id -u "$APP_USER" &>/dev/null || useradd --system --create-home --shell /usr/sbin/nologin "$APP_USER"
-usermod -aG docker "$APP_USER"
+echo "$APP_USER ALL=(ALL) NOPASSWD: /usr/bin/docker" | tee /etc/sudoers.d/project-hub-docker
 
 echo "==> Repo klonen"
 if [ -d "$APP_DIR/.git" ]; then
