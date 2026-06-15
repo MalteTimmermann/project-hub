@@ -44,7 +44,7 @@ async def list_projects() -> list[dict]:
     if settings.github_owner_is_org:
         path = f"/orgs/{owner}/repos?per_page=100&sort=pushed"
     else:
-        path = f"/users/{owner}/repos?per_page=100&sort=pushed"
+        path = "/user/repos?per_page=100&sort=pushed&affiliation=owner"
 
     resp = await _request("GET", path)
     repos = resp.json()

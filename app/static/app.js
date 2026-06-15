@@ -3,6 +3,23 @@ const statusEl = document.getElementById("status");
 const search = document.getElementById("search");
 const modal = document.getElementById("modal");
 const formStatus = document.getElementById("form-status");
+const themeToggle = document.getElementById("theme-toggle");
+
+function applyTheme(isDark) {
+  if (isDark) {
+    document.documentElement.removeAttribute("data-theme");
+    themeToggle.textContent = "☀";
+  } else {
+    document.documentElement.dataset.theme = "light";
+    themeToggle.textContent = "🌙";
+  }
+  localStorage.setItem("theme", isDark ? "dark" : "light");
+}
+
+themeToggle.onclick = () => applyTheme(document.documentElement.dataset.theme === "light");
+
+const savedTheme = localStorage.getItem("theme");
+applyTheme(savedTheme !== "light");
 
 let projects = [];
 
@@ -28,9 +45,6 @@ function render(list) {
   for (const p of list) {
     const card = document.createElement("div");
     card.className = "card";
-    const live = p.homepage
-      ? `<a class="btn btn-small" href="${p.homepage}" target="_blank" rel="noopener">Live ↗</a>`
-      : "";
     card.innerHTML = `
       <div class="card-head">
         <span class="card-name">${p.name}</span>
@@ -43,7 +57,7 @@ function render(list) {
       </div>
       <div class="card-links">
         <a class="btn btn-small" href="${p.html_url}" target="_blank" rel="noopener">GitHub ↗</a>
-        ${live}
+        <a class="btn btn-small" href="/apps/${p.name}" target="_blank" rel="noopener">App ↗</a>
       </div>`;
     grid.appendChild(card);
   }
