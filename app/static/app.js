@@ -8,15 +8,17 @@ const themeToggle = document.getElementById("theme-toggle");
 function applyTheme(isDark) {
   if (isDark) {
     document.documentElement.removeAttribute("data-theme");
-    themeToggle.textContent = "☀";
+    if (themeToggle) themeToggle.textContent = "☀";
   } else {
     document.documentElement.dataset.theme = "light";
-    themeToggle.textContent = "🌙";
+    if (themeToggle) themeToggle.textContent = "🌙";
   }
   localStorage.setItem("theme", isDark ? "dark" : "light");
 }
 
-themeToggle.onclick = () => applyTheme(document.documentElement.dataset.theme === "light");
+if (themeToggle) {
+  themeToggle.onclick = () => applyTheme(document.documentElement.dataset.theme === "light");
+}
 
 const savedTheme = localStorage.getItem("theme");
 applyTheme(savedTheme !== "light");
@@ -28,6 +30,27 @@ function headers() {
   const h = { "Content-Type": "application/json" };
   if (window.__DASHBOARD_TOKEN__) h["X-Dashboard-Token"] = window.__DASHBOARD_TOKEN__;
   return h;
+}
+
+function ciIcon(status, conclusion, url) {
+  let icon, cls, title;
+  if (!status) return "";
+  if (status === "in_progress") {
+    icon = "●"; cls = "ci-running"; title = "Läuft…";
+  } else if (status !== "completed") {
+    icon = "○"; cls = "ci-queued"; title = "Wartend";
+  } else {
+    switch (conclusion) {
+      case "success":   icon = "✓"; cls = "ci-success";   title = "Erfolgreich"; break;
+      case "failure":   icon = "✗"; cls = "ci-failure";   title = "Fehlgeschlagen"; break;
+      case "cancelled": icon = "○"; cls = "ci-cancelled"; title = "Abgebrochen"; break;
+      default:          icon = "?"; cls = "ci-unknown";   title = conclusion || status;
+    }
+  }
+  const badge = `<span class="ci ${cls}" title="${title}">${icon}</span>`;
+  return url
+    ? `<a href="${url}" target="_blank" rel="noopener" class="ci-link">${badge}</a>`
+    : badge;
 }
 
 function fmtDate(iso) {
@@ -54,10 +77,12 @@ function render(list) {
       <div class="card-meta">
         <span>${p.language ? `<span class="dot"></span>${p.language}` : ""}</span>
         <span>${fmtDate(p.updated_at)}</span>
+        ${ciIcon(p.ci_status, p.ci_conclusion, p.ci_url)}
       </div>
       <div class="card-links">
         <a class="btn btn-small" href="${p.html_url}" target="_blank" rel="noopener">GitHub ↗</a>
-        <a class="btn btn-small" href="/apps/${p.name}" target="_blank" rel="noopener">App ↗</a>
+        <a class="btn btn-small" href="/apps/${p.name}/" target="_blank" rel="noopener">App ↗</a>
+        <button class="btn btn-small preview-btn" data-url="/apps/${p.name}/" data-name="${p.name}">Vorschau</button>
       </div>`;
     grid.appendChild(card);
   }
@@ -132,5 +157,29 @@ document.getElementById("new-form").onsubmit = async (e) => {
 
 search.oninput = applyFilter;
 document.getElementById("reload").onclick = load;
+
+// --- Vorschau-Modal ---
+const previewModal = document.getElementById("preview-modal");
+const previewFrame = document.getElementById("preview-frame");
+const previewTitle = document.getElementById("preview-title");
+const previewOpen  = document.getElementById("preview-open");
+
+function closePreview() {
+  previewModal.classList.add("hidden");
+  previewFrame.src = "";
+}
+
+document.getElementById("preview-close").onclick = closePreview;
+previewModal.onclick = (e) => { if (e.target === previewModal) closePreview(); };
+
+grid.addEventListener("click", (e) => {
+  const btn = e.target.closest(".preview-btn");
+  if (!btn) return;
+  const url = btn.dataset.url;
+  previewTitle.textContent = btn.dataset.name;
+  previewOpen.href = url;
+  previewFrame.src = url;
+  previewModal.classList.remove("hidden");
+});
 
 load();

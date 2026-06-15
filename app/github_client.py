@@ -1,6 +1,7 @@
 """Schlanker Wrapper um die GitHub REST API (nur was das Dashboard braucht)."""
 from __future__ import annotations
 
+import asyncio
 from base64 import b64encode
 
 import httpx
@@ -38,6 +39,22 @@ async def _request(method: str, path: str, **kwargs) -> httpx.Response:
     return resp
 
 
+async def get_latest_run(full_name: str) -> dict | None:
+    try:
+        resp = await _request("GET", f"/repos/{full_name}/actions/runs?per_page=1")
+        runs = resp.json().get("workflow_runs", [])
+        if runs:
+            r = runs[0]
+            return {
+                "status": r.get("status"),
+                "conclusion": r.get("conclusion"),
+                "url": r.get("html_url"),
+            }
+    except GitHubError:
+        pass
+    return None
+
+
 async def list_projects() -> list[dict]:
     """Repos des Owners listen, optional nach Topic gefiltert."""
     owner = settings.github_owner
@@ -69,6 +86,21 @@ async def list_projects() -> list[dict]:
                 "private": r.get("private", False),
             }
         )
+
+    ci_results = await asyncio.gather(
+        *[get_latest_run(p["full_name"]) for p in projects],
+        return_exceptions=True,
+    )
+    for p, ci in zip(projects, ci_results):
+        if isinstance(ci, dict):
+            p["ci_status"] = ci.get("status")
+            p["ci_conclusion"] = ci.get("conclusion")
+            p["ci_url"] = ci.get("url")
+        else:
+            p["ci_status"] = None
+            p["ci_conclusion"] = None
+            p["ci_url"] = None
+
     return projects
 
 

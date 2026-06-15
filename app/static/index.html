@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Project Hub</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%232f81f7'/><text x='16' y='23' text-anchor='middle' font-size='20' fill='white'>◆</text></svg>" />
-  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/style.css?v=4" />
 </head>
 <body>
   <header class="topbar">
@@ -52,6 +52,18 @@
     </div>
   </div>
 
-  <script src="/static/app.js"></script>
+  <!-- Modal: Live-Vorschau -->
+  <div id="preview-modal" class="modal hidden">
+    <div class="preview-card">
+      <div class="preview-toolbar">
+        <span id="preview-title"></span>
+        <a id="preview-open" class="btn btn-ghost btn-small" target="_blank" rel="noopener">Öffnen ↗</a>
+        <button id="preview-close" class="btn btn-ghost">✕</button>
+      </div>
+      <iframe id="preview-frame" src="" loading="lazy"></iframe>
+    </div>
+  </div>
+
+  <script src="/static/app.js?v=4"></script>
 </body>
 </html>
