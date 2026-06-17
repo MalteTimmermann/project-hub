@@ -327,6 +327,10 @@ async def _push_template_files(full_name: str) -> list[str]:
     if not tree_items:
         return warnings + ["Keine Template-Dateien gefunden."]
 
+    # Initialen Commit von auto_init holen (parent für unseren Commit)
+    ref_resp = await _request("GET", f"/repos/{full_name}/git/ref/heads/main")
+    parent_sha = ref_resp.json()["object"]["sha"]
+
     tree_resp = await _request(
         "POST",
         f"/repos/{full_name}/git/trees",
@@ -338,13 +342,14 @@ async def _push_template_files(full_name: str) -> list[str]:
         json={
             "message": "init: Projekt aus Template",
             "tree": tree_resp.json()["sha"],
-            "parents": [],
+            "parents": [parent_sha],
         },
     )
+    # PATCH statt POST, da main-Branch durch auto_init bereits existiert
     await _request(
-        "POST",
-        f"/repos/{full_name}/git/refs",
-        json={"ref": "refs/heads/main", "sha": commit_resp.json()["sha"]},
+        "PATCH",
+        f"/repos/{full_name}/git/refs/heads/main",
+        json={"sha": commit_resp.json()["sha"]},
     )
     return warnings
 
@@ -359,7 +364,7 @@ async def create_project(name: str, description: str = "", private: bool = True)
     resp = await _request(
         "POST",
         endpoint,
-        json={"name": name, "description": description, "private": private, "auto_init": False},
+        json={"name": name, "description": description, "private": private, "auto_init": True},
     )
     repo = resp.json()
 
