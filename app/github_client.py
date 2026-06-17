@@ -2,16 +2,19 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import os
 import shlex
 import tempfile
 from datetime import datetime
+from pathlib import Path
 
 import httpx
 
 from .config import settings
 
 API = "https://api.github.com"
+TEMPLATE_DIR = Path(__file__).parent.parent / "project-template"
 
 
 def _headers() -> dict[str, str]:
@@ -250,6 +253,10 @@ su - github-runner -c "cd /opt/actions-runner-{n} && ./config.sh \\
 # Als Systemdienst starten
 /opt/actions-runner-{n}/svc.sh install github-runner
 /opt/actions-runner-{n}/svc.sh start
+
+# Docker Container initial bauen und starten
+cd /opt/{n}
+docker compose up -d --build
 """
 
     return await _vps_ssh(cmds, timeout=180)
@@ -287,25 +294,74 @@ rm -rf /opt/{n} /opt/actions-runner-{n}
     return await _vps_ssh(cmds)
 
 
-async def create_project(name: str, description: str = "", private: bool = True) -> dict:
-    """Neues Repo aus Template anlegen und VPS vollständig automatisch einrichten."""
-    if not settings.template_repo:
-        raise GitHubError(400, "TEMPLATE_REPO ist nicht konfiguriert.")
+async def _push_template_files(full_name: str) -> list[str]:
+    """Pusht alle project-template/ Dateien als initialen Commit via Git Trees API."""
+    warnings = []
+    tree_items = []
 
-    template_owner, template_name = settings.template_repo.split("/", 1)
+    for file_path in sorted(TEMPLATE_DIR.rglob("*")):
+        if file_path.is_dir():
+            continue
+        rel = str(file_path.relative_to(TEMPLATE_DIR))
+        try:
+            blob_resp = await _request(
+                "POST",
+                f"/repos/{full_name}/git/blobs",
+                json={
+                    "content": base64.b64encode(file_path.read_bytes()).decode(),
+                    "encoding": "base64",
+                },
+            )
+            tree_items.append({
+                "path": rel,
+                "mode": "100755" if rel.endswith(".sh") else "100644",
+                "type": "blob",
+                "sha": blob_resp.json()["sha"],
+            })
+        except GitHubError as e:
+            warnings.append(f"Template-Datei {rel}: {e.message}")
 
-    resp = await _request(
+    if not tree_items:
+        return warnings + ["Keine Template-Dateien gefunden."]
+
+    tree_resp = await _request(
         "POST",
-        f"/repos/{template_owner}/{template_name}/generate",
+        f"/repos/{full_name}/git/trees",
+        json={"tree": tree_items},
+    )
+    commit_resp = await _request(
+        "POST",
+        f"/repos/{full_name}/git/commits",
         json={
-            "owner": settings.github_owner,
-            "name": name,
-            "description": description,
-            "private": private,
-            "include_all_branches": False,
+            "message": "init: Projekt aus Template",
+            "tree": tree_resp.json()["sha"],
+            "parents": [],
         },
     )
+    await _request(
+        "POST",
+        f"/repos/{full_name}/git/refs",
+        json={"ref": "refs/heads/main", "sha": commit_resp.json()["sha"]},
+    )
+    return warnings
+
+
+async def create_project(name: str, description: str = "", private: bool = True) -> dict:
+    """Neues Repo anlegen, lokales Template einspielen und VPS vollständig einrichten."""
+    endpoint = (
+        f"/orgs/{settings.github_owner}/repos"
+        if settings.github_owner_is_org
+        else "/user/repos"
+    )
+    resp = await _request(
+        "POST",
+        endpoint,
+        json={"name": name, "description": description, "private": private, "auto_init": False},
+    )
     repo = resp.json()
+
+    # Lokales Template einspielen (ein Commit, inkl. CI/CD-Pipeline)
+    warnings = await _push_template_files(repo["full_name"])
 
     # Topic setzen, damit Projekt im Dashboard erscheint
     topic = settings.project_topic.strip()
@@ -319,8 +375,8 @@ async def create_project(name: str, description: str = "", private: bool = True)
         except GitHubError:
             pass
 
-    # VPS automatisch einrichten
-    warnings = await _setup_vps(name, repo["full_name"])
+    # VPS einrichten: clone → Port → Runner → Docker-Start
+    warnings += await _setup_vps(name, repo["full_name"])
 
     return {
         "name": repo["name"],
