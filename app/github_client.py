@@ -5,11 +5,9 @@ import asyncio
 import os
 import shlex
 import tempfile
-from base64 import b64encode
 from datetime import datetime
 
 import httpx
-from nacl import encoding, public
 
 from .config import settings
 
@@ -127,7 +125,7 @@ async def list_projects() -> list[dict]:
                 "description": r.get("description") or "",
                 "html_url": r["html_url"],
                 "homepage": r.get("homepage") or "",
-                "language": r.get("language") or "",  # kept for search/filter compat
+                "language": r.get("language") or "",
                 "topics": r.get("topics") or [],
                 "created_at": r.get("created_at") or "",
                 "updated_at": r.get("pushed_at") or r.get("updated_at"),
@@ -163,65 +161,10 @@ async def list_projects() -> list[dict]:
     return projects
 
 
-def _encrypt_secret(public_key: str, value: str) -> str:
-    """Wert mit dem Repo-Public-Key (libsodium sealed box) verschluesseln."""
-    pk = public.PublicKey(public_key.encode(), encoding.Base64Encoder())
-    sealed = public.SealedBox(pk)
-    return b64encode(sealed.encrypt(value.encode())).decode()
-
-
-async def set_deploy_secrets(full_name: str) -> list[str]:
-    """VPS_*-Secrets in das neue Repo schreiben. Gibt Warnungen zurueck."""
-    secrets = {
-        "VPS_HOST": settings.vps_host,
-        "VPS_USER": settings.vps_user,
-        "VPS_PORT": settings.vps_port,
-        "VPS_SSH_KEY": settings.vps_ssh_key,
-    }
-    missing = [k for k, v in secrets.items() if not v]
-    if missing:
-        return [f"Secrets nicht gesetzt (in .env leer): {', '.join(missing)}"]
-
-    # Public Key des Repos holen (zum Verschluesseln)
-    pk_resp = await _request("GET", f"/repos/{full_name}/actions/secrets/public-key")
-    pk = pk_resp.json()
-
-    warnings: list[str] = []
-    for name, value in secrets.items():
-        try:
-            await _request(
-                "PUT",
-                f"/repos/{full_name}/actions/secrets/{name}",
-                json={
-                    "encrypted_value": _encrypt_secret(pk["key"], value),
-                    "key_id": pk["key_id"],
-                },
-            )
-        except GitHubError as e:
-            warnings.append(f"{name}: {e.message}")
-    return warnings
-
-
-async def delete_project(full_name: str) -> None:
-    """Loescht das GitHub-Repo dauerhaft (nicht rueckgaengig zu machen)."""
-    await _request("DELETE", f"/repos/{full_name}")
-
-
-async def cleanup_vps(name: str) -> list[str]:
-    """SSH in VPS, entfernt Service, Nginx-Config und App-Verzeichnis."""
-    if not all([settings.vps_host, settings.vps_user, settings.vps_ssh_key]):
-        return ["VPS-Zugangsdaten nicht konfiguriert — Server-Cleanup uebersprungen."]
-
-    safe = shlex.quote(name)
-    cmds = (
-        f"systemctl stop {safe} 2>/dev/null || true && "
-        f"systemctl disable {safe} 2>/dev/null || true && "
-        f"rm -f /etc/systemd/system/{safe}.service && "
-        "systemctl daemon-reload && "
-        f"rm -f /etc/nginx/sites-available/{safe} /etc/nginx/sites-enabled/{safe} && "
-        "nginx -s reload 2>/dev/null || true && "
-        f"rm -rf /opt/{safe}"
-    )
+async def _vps_ssh(cmds: str, timeout: int = 120) -> list[str]:
+    """Führt Shell-Befehle via SSH auf dem VPS aus (über host.docker.internal)."""
+    if not all([settings.vps_user, settings.vps_ssh_key]):
+        return ["VPS-Zugangsdaten nicht konfiguriert — Schritt übersprungen."]
 
     key_content = settings.vps_ssh_key.replace("\\n", "\n")
     with tempfile.NamedTemporaryFile(mode="w", suffix=".key", delete=False) as f:
@@ -236,45 +179,135 @@ async def cleanup_vps(name: str) -> list[str]:
             "-o", "StrictHostKeyChecking=no",
             "-o", "ConnectTimeout=10",
             "-p", settings.vps_port or "22",
-            f"{settings.vps_user}@{settings.vps_host}",
-            f"sudo bash -c {shlex.quote(cmds)}",
+            f"{settings.vps_user}@{settings.vps_internal_host}",
+            f"bash -c {shlex.quote(cmds)}",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         if proc.returncode != 0:
-            return [f"VPS-Cleanup Fehler: {stderr.decode().strip()[:300]}"]
+            return [f"VPS-Fehler: {stderr.decode().strip()[:300]}"]
         return []
     except asyncio.TimeoutError:
-        return ["VPS-Cleanup Timeout (>30s)."]
+        return [f"VPS-Timeout (>{timeout}s)."]
     except Exception as e:
-        return [f"VPS-Cleanup fehlgeschlagen: {e}"]
+        return [f"VPS-SSH fehlgeschlagen: {e}"]
     finally:
         os.unlink(key_file)
 
 
+async def _get_runner_token(full_name: str) -> str | None:
+    try:
+        resp = await _request("POST", f"/repos/{full_name}/actions/runners/registration-token")
+        return resp.json()["token"]
+    except GitHubError:
+        return None
+
+
+async def _setup_vps(name: str, full_name: str) -> list[str]:
+    """Klont Repo, vergibt Port, öffnet UFW und registriert GitHub Actions Runner."""
+    runner_token = await _get_runner_token(full_name)
+    if not runner_token:
+        return ["Runner-Token konnte nicht von GitHub abgerufen werden."]
+
+    github_url = f"https://github.com/{full_name}"
+    n = shlex.quote(name)
+
+    cmds = f"""
+set -e
+
+# Repo klonen
+git clone {shlex.quote(github_url)} /opt/{n}
+chown -R github-runner:github-runner /opt/{n}
+
+# Nächsten freien Port ermitteln (startet bei 8081)
+PORT=$(cat /opt/.next-port 2>/dev/null || echo 8081)
+echo $((PORT + 1)) > /opt/.next-port
+
+# .env anlegen
+echo "APP_PORT=$PORT" > /opt/{n}/.env
+
+# Port in UFW freigeben
+ufw allow "$PORT/tcp"
+
+# Runner-Binary herunterladen
+mkdir -p /opt/actions-runner-{n}
+cd /opt/actions-runner-{n}
+RUNNER_URL=$(curl -fsSL https://api.github.com/repos/actions/runner/releases/latest \
+  | grep -oP '"browser_download_url": "\\K[^"]*linux-x64[^"]*\\.tar\\.gz')
+curl -fsSL -o runner.tar.gz "$RUNNER_URL"
+tar xzf runner.tar.gz
+rm runner.tar.gz
+chown -R github-runner:github-runner /opt/actions-runner-{n}
+
+# Runner konfigurieren
+su - github-runner -c "cd /opt/actions-runner-{n} && ./config.sh \\
+  --url {shlex.quote(github_url)} \\
+  --token {shlex.quote(runner_token)} \\
+  --name {n} \\
+  --unattended --replace"
+
+# Als Systemdienst starten
+/opt/actions-runner-{n}/svc.sh install github-runner
+/opt/actions-runner-{n}/svc.sh start
+"""
+
+    return await _vps_ssh(cmds, timeout=180)
+
+
+async def delete_project(full_name: str) -> None:
+    """Löscht das GitHub-Repo dauerhaft."""
+    await _request("DELETE", f"/repos/{full_name}")
+
+
+async def cleanup_vps(name: str) -> list[str]:
+    """Stoppt Container und Runner, entfernt nginx-Config und Verzeichnisse."""
+    n = shlex.quote(name)
+    cmds = f"""
+# Docker Container stoppen
+[ -d /opt/{n} ] && cd /opt/{n} && docker compose down 2>/dev/null || true
+
+# Runner-Service stoppen und deinstallieren
+if [ -d /opt/actions-runner-{n} ]; then
+    /opt/actions-runner-{n}/svc.sh stop 2>/dev/null || true
+    /opt/actions-runner-{n}/svc.sh uninstall 2>/dev/null || true
+fi
+
+# nginx-Config entfernen
+rm -f /etc/nginx/sites-available/{n} /etc/nginx/sites-enabled/{n}
+nginx -s reload 2>/dev/null || true
+
+# UFW-Port schließen (Port aus .env lesen)
+PORT=$(grep APP_PORT /opt/{n}/.env 2>/dev/null | cut -d= -f2)
+[ -n "$PORT" ] && ufw delete allow "$PORT/tcp" 2>/dev/null || true
+
+# Verzeichnisse löschen
+rm -rf /opt/{n} /opt/actions-runner-{n}
+"""
+    return await _vps_ssh(cmds)
+
+
 async def create_project(name: str, description: str = "", private: bool = True) -> dict:
-    """Neues Repo aus dem Template generieren, Topic + VPS-Deploy-Secrets setzen."""
+    """Neues Repo aus Template anlegen und VPS vollständig automatisch einrichten."""
     if not settings.template_repo:
         raise GitHubError(400, "TEMPLATE_REPO ist nicht konfiguriert.")
 
     template_owner, template_name = settings.template_repo.split("/", 1)
 
-    payload = {
-        "owner": settings.github_owner,
-        "name": name,
-        "description": description,
-        "private": private,
-        "include_all_branches": False,
-    }
     resp = await _request(
         "POST",
         f"/repos/{template_owner}/{template_name}/generate",
-        json=payload,
+        json={
+            "owner": settings.github_owner,
+            "name": name,
+            "description": description,
+            "private": private,
+            "include_all_branches": False,
+        },
     )
     repo = resp.json()
 
-    # Topic setzen, damit das Projekt im Dashboard auftaucht
+    # Topic setzen, damit Projekt im Dashboard erscheint
     topic = settings.project_topic.strip()
     if topic:
         try:
@@ -284,16 +317,15 @@ async def create_project(name: str, description: str = "", private: bool = True)
                 json={"names": [topic]},
             )
         except GitHubError:
-            pass  # nicht kritisch fuers Anlegen
+            pass
 
-    # VPS-Deploy-Secrets injizieren (Option 2)
-    secret_warnings = await set_deploy_secrets(repo["full_name"])
+    # VPS automatisch einrichten
+    warnings = await _setup_vps(name, repo["full_name"])
 
     return {
         "name": repo["name"],
         "full_name": repo["full_name"],
         "html_url": repo["html_url"],
         "private": repo.get("private", True),
-        "secrets_set": not secret_warnings,
-        "warnings": secret_warnings,
+        "warnings": warnings,
     }

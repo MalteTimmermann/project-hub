@@ -1,0 +1,23 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Deploy
+        run: |
+          set -e
+          cd /opt/${{ github.event.repository.name }}
+          git fetch --all
+          git reset --hard origin/main
+          docker compose up -d --build
+          echo "Deploy fertig: $(git rev-parse --short HEAD)"

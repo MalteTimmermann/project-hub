@@ -14,12 +14,11 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8080
 
-    # VPS-Deploy-Secrets, die in jedes neu erstellte Repo injiziert werden
-    # (Option 2: Dashboard setzt sie per GitHub Actions Secrets API).
-    vps_host: str = ""
     vps_user: str = ""
     vps_port: str = "22"
     vps_ssh_key: str = ""
+    # Interner SSH-Host: Container → VPS-Host (über Docker bridge)
+    vps_internal_host: str = "host.docker.internal"
 
 
 settings = Settings()
