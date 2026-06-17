@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssh-client 
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
+COPY project-template/ ./project-template/
 
 RUN adduser --disabled-password --no-create-home appuser
 USER appuser

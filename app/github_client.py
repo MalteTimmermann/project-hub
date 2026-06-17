@@ -170,6 +170,8 @@ async def _vps_ssh(cmds: str, timeout: int = 120) -> list[str]:
         return ["VPS-Zugangsdaten nicht konfiguriert — Schritt übersprungen."]
 
     key_content = settings.vps_ssh_key.replace("\\n", "\n")
+    if not key_content.endswith("\n"):
+        key_content += "\n"
     with tempfile.NamedTemporaryFile(mode="w", suffix=".key", delete=False) as f:
         f.write(key_content)
         key_file = f.name
@@ -180,6 +182,7 @@ async def _vps_ssh(cmds: str, timeout: int = 120) -> list[str]:
             "ssh",
             "-i", key_file,
             "-o", "StrictHostKeyChecking=no",
+            "-o", "UserKnownHostsFile=/dev/null",
             "-o", "ConnectTimeout=10",
             "-p", settings.vps_port or "22",
             f"{settings.vps_user}@{settings.vps_internal_host}",
