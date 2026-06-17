@@ -12,19 +12,13 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
-      - name: SSH deploy
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT }}
-          script: |
-            set -e
-            cd /opt/project-hub
-            git fetch --all
-            git reset --hard origin/main
-            sudo docker compose up -d --build
-            echo "Deploy fertig: $(git rev-parse --short HEAD)"
+      - name: Deploy
+        run: |
+          set -e
+          cd /opt/project-hub
+          git fetch --all
+          git reset --hard origin/main
+          docker compose up -d --build
+          echo "Deploy fertig: $(git rev-parse --short HEAD)"
